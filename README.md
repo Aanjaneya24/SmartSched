@@ -136,10 +136,3 @@ This project is licensed under the MIT License.
 
 **Aanjaneya Pandey**
 - GitHub: [@Aanjaneya24](https://github.com/Aanjaneya24)
-
-## 🙏 Acknowledgments
-
-- Thanks to the MERN stack community
-- Inspiration from modern productivity apps like Todoist and Notion
-- Heroicons for beautiful icons
-- Tailwind CSS for styling
