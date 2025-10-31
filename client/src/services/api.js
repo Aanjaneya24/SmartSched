@@ -7,7 +7,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json'
   },
-  timeout: 5000
+  timeout: 30000 // Increased to 30 seconds for cleanup operations
 });
 
 // Add request interceptor with error handling
@@ -30,7 +30,14 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.code === 'ECONNREFUSED') {
-      console.error('Server is not running. Please start the backend server.');
+      console.error('❌ Server is not running. Please start the backend server.');
+    } else if (error.code === 'ECONNABORTED') {
+      console.error('❌ Request timeout. The operation took too long.');
+    } else if (error.response?.status === 401) {
+      console.error('❌ Unauthorized. Please login again.');
+      // Optionally redirect to login
+    } else if (!error.response) {
+      console.error('❌ Network error. Please check your connection and server status.');
     }
     return Promise.reject(error);
   }

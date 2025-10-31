@@ -7,14 +7,11 @@ const signup = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.log('Validation errors:', errors.array());
       return res.status(400).json({ 
         message: 'Invalid input',
         errors: errors.array() 
       });
     }
-
-    console.log('Signup request body:', req.body); // Debug log
 
     const { name, email, password } = req.body;
 
@@ -24,11 +21,15 @@ const signup = async (req, res) => {
       return res.status(400).json({ message: 'User already exists' });
     }
 
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
     // Create new user
     user = new User({
       name,
       email,
-      password
+      password: hashedPassword
     });
 
     await user.save();
@@ -64,13 +65,15 @@ const login = async (req, res) => {
     }
 
     const { email, password } = req.body;
+    
     const user = await User.findOne({ email });
 
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
-
+    
     const isMatch = await bcrypt.compare(password, user.password);
+    
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }

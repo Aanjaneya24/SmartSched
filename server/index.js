@@ -13,7 +13,7 @@ mongoose.connect(process.env.MONGO_CONN)
 
 // Update CORS configuration to allow both ports
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173'],
+  origin: ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -35,6 +35,14 @@ app.use('/auth', authRouter);
 
 // Task Routes
 app.use('/tasks', require('./Routes/TaskRouter'));
+
+// Timetable Routes
+const timetableRouter = require('./Routes/TimetableRouter');
+app.use('/api/timetable', timetableRouter);
+
+// Google Calendar Routes
+const googleCalendarRouter = require('./Routes/GoogleCalendarRouter');
+app.use('/api/google-calendar', googleCalendarRouter);
 
 // 404 Handler
 app.use((req, res, next) => {

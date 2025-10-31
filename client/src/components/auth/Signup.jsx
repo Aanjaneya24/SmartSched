@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { authService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 function Signup() {
   const [formData, setFormData] = useState({
@@ -12,14 +12,19 @@ function Signup() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { signup, isAuthenticated } = useAuth();
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Remove confirmPassword from the data sent to API
-    const { confirmPassword, ...signupData } = formData;
-    
-    if (formData.password !== confirmPassword) {
+    if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
     }
@@ -27,16 +32,16 @@ function Signup() {
     setLoading(true);
     setError('');
 
-    try {
-      const response = await authService.signup(signupData);
-      localStorage.setItem('token', response.token);
-      navigate('/');
-    } catch (err) {
-      console.error('Signup error:', err);
-      setError(err.response?.data?.message || 'Signup failed');
-    } finally {
-      setLoading(false);
+    const { confirmPassword, ...signupData } = formData;
+    const result = await signup(signupData);
+    
+    if (result.success) {
+      navigate('/', { replace: true });
+    } else {
+      setError(result.error);
     }
+    
+    setLoading(false);
   };
 
   return (
@@ -99,10 +104,22 @@ function Signup() {
           <div>
             <button
               type="submit"
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
               disabled={loading}
+              className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${
+                loading ? 'bg-pink-400 cursor-not-allowed' : 'bg-pink-600 hover:bg-pink-700'
+              } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500`}
             >
-              {loading ? 'Signing up...' : 'Sign up'}
+              {loading ? (
+                <span className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Creating account...
+                </span>
+              ) : (
+                'Sign up'
+              )}
             </button>
           </div>
         </form>

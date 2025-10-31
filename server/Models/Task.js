@@ -7,6 +7,11 @@ const TaskSchema = new mongoose.Schema({
   category: { type: String, default: 'General' },
   priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
   completed: { type: Boolean, default: false },
+  dueDate: { type: Date },
+  startTime: { type: Date },
+  endTime: { type: Date },
+  googleCalendarEventId: { type: String }, // Store Google Calendar event ID for sync
+  syncWithCalendar: { type: Boolean, default: false }, // Whether to sync with Google Calendar
   createdAt: { type: Date, default: Date.now }
 });
 

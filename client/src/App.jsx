@@ -1,11 +1,16 @@
 import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import ProtectedRoute from "./components/routes/ProtectedRoute";
+import { TaskProvider } from "./context/TaskContext";
+import { GoogleCalendarProvider } from "./context/GoogleCalendarContext";
+import { TimetableProvider } from "./context/TimetableContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import Navbar from "./components/Navbar";
 import Dashboard from "./components/Dashboard";
 import Progress from "./components/Progress";
 import Tasks from "./components/Tasks";
 import TimeTable from "./components/TimeTable";
+import GoogleCalendarIntegration from "./components/GoogleCalendarIntegration";
 import Login from "./components/auth/Login";
 import Signup from "./components/auth/Signup";
 import Footer from "./components/Footer";
@@ -13,8 +18,12 @@ import Footer from "./components/Footer";
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-50 flex flex-col">
-        <Navbar />
+      <ThemeProvider>
+        <TaskProvider>
+          <GoogleCalendarProvider>
+            <TimetableProvider>
+            <div className="min-h-screen bg-white dark:bg-slate-900 flex flex-col transition-colors duration-300">
+              <Navbar />
         <main className="flex-1">
           <Routes>
             {/* Public Routes */}
@@ -54,6 +63,14 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/calendar"
+              element={
+                <ProtectedRoute>
+                  <GoogleCalendarIntegration />
+                </ProtectedRoute>
+              }
+            />
 
             {/* 404 Route */}
             <Route
@@ -73,6 +90,10 @@ function App() {
         </main>
         <Footer />
       </div>
+            </TimetableProvider>
+          </GoogleCalendarProvider>
+        </TaskProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

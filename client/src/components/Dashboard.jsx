@@ -1,26 +1,35 @@
 import React, { useState, useEffect } from "react";
 import { ChevronDownIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "../context/AuthContext";
-import { taskService } from "../services/taskService";
-import { CheckCircleIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { useTask } from "../context/TaskContext";
+import { useTimetable } from "../context/TimetableContext";
+import { useGoogleCalendar } from "../context/GoogleCalendarContext";
+import { CheckCircleIcon, PencilIcon, TrashIcon, ClockIcon, MapPinIcon, CalendarIcon } from "@heroicons/react/24/outline";
+import { FaBook, FaCalendarDay, FaTasks } from "react-icons/fa";
 
 function Dashboard() {
   const { user } = useAuth();
+  const { 
+    tasks, 
+    loading: loadingTasks, 
+    updateTask, 
+    deleteTask, 
+    toggleTaskCompletion,
+    getFilteredTasks 
+  } = useTask();
+  
+  const { getSlotsForDay } = useTimetable();
+  const { todayEvents, connected: calendarConnected } = useGoogleCalendar();
 
   // Calendar state
   const daysOfWeek = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarDays, setCalendarDays] = useState([]);
 
-  // Task state
-  const [tasks, setTasks] = useState([]);
-  const [loadingTasks, setLoadingTasks] = useState(true);
-  const [title, setTitle] = useState('');
-  const [detail, setDetail] = useState('');
-  const [category, setCategory] = useState('General');
-  const [priority, setPriority] = useState('Medium');
+  // Filter state
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterPriority, setFilterPriority] = useState('All');
+  
   // Edit state
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editTitle, setEditTitle] = useState('');
@@ -67,58 +76,19 @@ function Dashboard() {
     generateCalendarDays();
   }, [currentDate]);
 
-  // Fetch tasks from backend
-  useEffect(() => {
-    const fetchTasks = async () => {
-      setLoadingTasks(true);
-      try {
-        const res = await taskService.getTasks();
-        setTasks(res.data);
-      } catch (error) {
-        console.error("Error fetching tasks:", error);
-      } finally {
-        setLoadingTasks(false);
-      }
-    };
-    fetchTasks();
-  }, []);
-
-  // Add new task
-  const handleAddTask = async (e) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    try {
-      const res = await taskService.createTask({ title, detail, category, priority });
-      setTasks([res.data, ...tasks]);
-      setTitle('');
-      setDetail('');
-      setCategory('General');
-      setPriority('Medium');
-    } catch (err) {
-      console.error("Error adding task:", err);
-    }
-  };
-
   // Complete task
   const handleCompleteTask = async (task) => {
-    try {
-      const updated = await taskService.updateTask(task._id, {
-        ...task,
-        completed: !task.completed,
-      });
-      setTasks(tasks.map(t => t._id === task._id ? updated.data : t));
-    } catch (err) {
-      console.error("Error completing task:", err);
+    const result = await toggleTaskCompletion(task._id);
+    if (!result.success) {
+      console.error("Error completing task:", result.error);
     }
   };
 
   // Delete task
   const handleDeleteTask = async (id) => {
-    try {
-      await taskService.deleteTask(id);
-      setTasks(tasks.filter(t => t._id !== id));
-    } catch (err) {
-      console.error("Error deleting task:", err);
+    const result = await deleteTask(id);
+    if (!result.success) {
+      console.error("Error deleting task:", result.error);
     }
   };
 
@@ -132,17 +102,17 @@ function Dashboard() {
   // Save edit
   const handleEditTask = async (e) => {
     e.preventDefault();
-    try {
-      const updated = await taskService.updateTask(editingTaskId, {
-        title: editTitle,
-        detail: editDetail,
-      });
-      setTasks(tasks.map(t => t._id === editingTaskId ? updated.data : t));
+    const result = await updateTask(editingTaskId, {
+      title: editTitle,
+      detail: editDetail,
+    });
+    
+    if (result.success) {
       setEditingTaskId(null);
       setEditTitle('');
       setEditDetail('');
-    } catch (err) {
-      console.error("Error editing task:", err);
+    } else {
+      console.error("Error editing task:", result.error);
     }
   };
 
@@ -162,79 +132,147 @@ function Dashboard() {
     setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + increment)));
   };
 
-  // Filtered tasks based on category and priority
-  const filteredTasks = tasks.filter(task => {
-    return (filterCategory === 'All' || task.category === filterCategory) &&
-           (filterPriority === 'All' || task.priority === filterPriority);
+  // Filtered tasks based on category and priority using TaskContext helper
+  const filteredTasks = getFilteredTasks({
+    category: filterCategory !== 'All' ? filterCategory : undefined,
+    priority: filterPriority !== 'All' ? filterPriority : undefined,
   });
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8">
+    <div className="max-w-7xl mx-auto px-6 py-8 bg-gray-50 dark:bg-slate-900 min-h-screen transition-colors duration-300">
       {/* Header */}
-      <h1 className="text-4xl font-bold mb-8">
+      <h1 className="text-4xl font-bold mb-8 text-gray-900 dark:text-white transition-colors duration-300">
         Hello, {user ? user.name : 'Guest'}! &nbsp;
-        <span className="text-gray-500">Let's finished today's work</span>
+        <span className="text-gray-500 dark:text-slate-300">Let's finish today's work</span>
       </h1>
 
-      {/* Task Input Section */}
-      <form className="flex gap-4 mb-8 flex-wrap" onSubmit={handleAddTask}>
-        <input
-          type="text"
-          placeholder="Type Title Of Task"
-          className="px-4 py-2 bg-gray-100 rounded-md w-48"
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-        />
-        <input
-          type="text"
-          placeholder="Detail Of Your Task"
-          className="px-4 py-2 bg-gray-100 rounded-md flex-1"
-          value={detail}
-          onChange={e => setDetail(e.target.value)}
-        />
-        <select
-          className="px-4 py-2 bg-gray-100 rounded-md"
-          value={category}
-          onChange={e => setCategory(e.target.value)}
-        >
-          <option value="General">General</option>
-          <option value="Work">Work</option>
-          <option value="Personal">Personal</option>
-          <option value="Study">Study</option>
-        </select>
-        <select
-          className="px-4 py-2 bg-gray-100 rounded-md"
-          value={priority}
-          onChange={e => setPriority(e.target.value)}
-        >
-          <option value="Low">Low</option>
-          <option value="Medium">Medium</option>
-          <option value="High">High</option>
-        </select>
-        <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
-          +
-        </button>
-      </form>
+      {/* Today's Schedule Section */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white flex items-center gap-2">
+          <CalendarIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          Today's Schedule
+        </h2>
+        <div className="grid grid-cols-3 gap-6">
+          {/* Today's Classes */}
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 p-6 rounded-xl shadow-lg border border-blue-200 dark:border-blue-600 transition-all duration-300">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-blue-900 dark:text-blue-100">
+              <FaBook className="text-blue-600 dark:text-blue-400" />
+              Classes ({getSlotsForDay(new Date().getDay()).length})
+            </h3>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {getSlotsForDay(new Date().getDay()).length > 0 ? (
+                getSlotsForDay(new Date().getDay()).map((slot) => (
+                  <div key={slot._id} className="bg-white dark:bg-slate-700 p-3 rounded-lg border-l-4 border-blue-500 dark:border-blue-400">
+                    <h4 className="font-semibold text-gray-900 dark:text-white">{slot.subject}</h4>
+                    <div className="flex items-center gap-2 mt-1 text-sm text-gray-600 dark:text-slate-300">
+                      <ClockIcon className="w-4 h-4" />
+                      {slot.startTime} - {slot.endTime}
+                    </div>
+                    {slot.location && (
+                      <div className="flex items-center gap-2 mt-1 text-sm text-gray-600 dark:text-slate-300">
+                        <MapPinIcon className="w-4 h-4" />
+                        {slot.location}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-600 dark:text-slate-400 text-sm italic">No classes today</p>
+              )}
+            </div>
+          </div>
+
+          {/* Today's Tasks */}
+          <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 p-6 rounded-xl shadow-lg border border-green-200 dark:border-green-600 transition-all duration-300">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-green-900 dark:text-green-100">
+              <FaTasks className="text-green-600 dark:text-green-400" />
+              Tasks ({tasks.filter(t => !t.completed && t.dueDate && new Date(t.dueDate).toDateString() === new Date().toDateString()).length})
+            </h3>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {tasks.filter(t => !t.completed && t.dueDate && new Date(t.dueDate).toDateString() === new Date().toDateString()).length > 0 ? (
+                tasks.filter(t => !t.completed && t.dueDate && new Date(t.dueDate).toDateString() === new Date().toDateString()).map((task) => (
+                  <div key={task._id} className="bg-white dark:bg-slate-700 p-3 rounded-lg border-l-4 border-green-500 dark:border-green-400">
+                    <h4 className="font-semibold text-gray-900 dark:text-white">{task.title}</h4>
+                    <p className="text-sm text-gray-600 dark:text-slate-300 mt-1">{task.detail}</p>
+                    <div className="flex gap-2 mt-2">
+                      <span className={`px-2 py-1 rounded-full text-xs font-bold
+                        ${task.priority === 'High' ? 'bg-red-200 dark:bg-red-800/50 text-red-800 dark:text-red-100' :
+                          task.priority === 'Medium' ? 'bg-yellow-200 dark:bg-yellow-800/50 text-yellow-800 dark:text-yellow-100' :
+                          'bg-green-200 dark:bg-green-800/50 text-green-800 dark:text-green-100'}`}>
+                        {task.priority}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-600 dark:text-slate-400 text-sm italic">No tasks due today</p>
+              )}
+            </div>
+          </div>
+
+          {/* Today's Google Calendar Events */}
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/30 p-6 rounded-xl shadow-lg border border-purple-200 dark:border-purple-600 transition-all duration-300">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-purple-900 dark:text-purple-100">
+              <FaCalendarDay className="text-purple-600 dark:text-purple-400" />
+              Calendar Events ({calendarConnected ? todayEvents.filter(event => {
+                const todaySlots = getSlotsForDay(new Date().getDay());
+                const timetableSubjects = new Set(todaySlots.map(slot => slot.subject?.toLowerCase().trim()));
+                return !timetableSubjects.has(event.title?.toLowerCase().trim());
+              }).length : 0})
+            </h3>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {calendarConnected && todayEvents.length > 0 ? (
+                todayEvents.filter(event => {
+                  // Filter out events that are duplicates of timetable classes
+                  const todaySlots = getSlotsForDay(new Date().getDay());
+                  const timetableSubjects = new Set(todaySlots.map(slot => slot.subject?.toLowerCase().trim()));
+                  return !timetableSubjects.has(event.title?.toLowerCase().trim());
+                }).map((event) => (
+                  <div key={event.id} className="bg-white dark:bg-slate-700 p-3 rounded-lg border-l-4 border-purple-500 dark:border-purple-400">
+                    <h4 className="font-semibold text-gray-900 dark:text-white">{event.title}</h4>
+                    {!event.isAllDay && (
+                      <div className="flex items-center gap-2 mt-1 text-sm text-gray-600 dark:text-slate-300">
+                        <ClockIcon className="w-4 h-4" />
+                        {new Date(event.start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    )}
+                    {event.location && (
+                      <div className="flex items-center gap-2 mt-1 text-sm text-gray-600 dark:text-slate-300">
+                        <MapPinIcon className="w-4 h-4" />
+                        {event.location}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : !calendarConnected ? (
+                <p className="text-gray-600 dark:text-slate-400 text-sm italic">Google Calendar not connected</p>
+              ) : (
+                <p className="text-gray-600 dark:text-slate-400 text-sm italic">No events today</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Main Content */}
       <div className="grid grid-cols-12 gap-8">
         {/* Calendar Section - 4 columns */}
         <div className="col-span-4">
-          <div className="bg-gray-50 p-6 rounded-lg sticky top-4 mt-13">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg dark:shadow-2xl border border-gray-200 dark:border-slate-600 sticky top-4 mt-13 transition-all duration-300">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-serif">
+              <h2 className="text-2xl font-serif font-bold text-gray-900 dark:text-white">
                 {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
               </h2>
               <div className="flex gap-2">
                 <button 
                   onClick={() => changeMonth(-1)}
-                  className="p-1 hover:bg-gray-200 rounded"
+                  className="p-1 hover:bg-gray-200 dark:hover:bg-slate-600 rounded transition-colors duration-200 text-gray-700 dark:text-slate-200 font-bold"
                 >
                   ←
                 </button>
                 <button 
                   onClick={() => changeMonth(1)}
-                  className="p-1 hover:bg-gray-200 rounded"
+                  className="p-1 hover:bg-gray-200 dark:hover:bg-slate-600 rounded transition-colors duration-200 text-gray-700 dark:text-slate-200 font-bold"
                 >
                   →
                 </button>
@@ -244,7 +282,7 @@ function Dashboard() {
             {/* Calendar Grid */}
             <div className="grid grid-cols-7 gap-1 text-sm">
               {daysOfWeek.map((day) => (
-                <div key={day} className="text-center py-1 text-gray-600 font-medium">
+                <div key={day} className="text-center py-1 text-gray-600 dark:text-slate-300 font-semibold">
                   {day}
                 </div>
               ))}
@@ -252,10 +290,10 @@ function Dashboard() {
                 <div
                   key={index}
                   className={`
-                    text-center py-1 rounded-full
-                    ${day.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'}
-                    ${day.isToday ? 'bg-pink-500 text-white' : ''}
-                    ${day.isCurrentMonth && !day.isToday ? 'hover:bg-gray-200 cursor-pointer' : ''}
+                    text-center py-1 rounded-full transition-all duration-200
+                    ${day.isCurrentMonth ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-400 dark:text-slate-500'}
+                    ${day.isToday ? 'bg-pink-500 text-white font-bold shadow-lg' : ''}
+                    ${day.isCurrentMonth && !day.isToday ? 'hover:bg-gray-200 dark:hover:bg-slate-600 cursor-pointer' : ''}
                   `}
                 >
                   {day.day}
@@ -267,10 +305,11 @@ function Dashboard() {
 
         {/* Tasks Section - 8 columns */}
         <div className="col-span-8">
+          <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">All Tasks</h2>
           {/* Filters */}
           <div className="flex gap-4 mb-6 items-center flex-wrap">
             <select
-              className="px-4 py-2 bg-orange-50 rounded-md"
+              className="px-4 py-2 bg-white dark:bg-slate-800 text-gray-900 dark:text-white border border-orange-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 transition-all duration-300 font-medium"
               value={filterCategory}
               onChange={e => setFilterCategory(e.target.value)}
             >
@@ -281,7 +320,7 @@ function Dashboard() {
               <option value="Study">Study</option>
             </select>
             <select
-              className="px-4 py-2 bg-orange-50 rounded-md"
+              className="px-4 py-2 bg-white dark:bg-slate-800 text-gray-900 dark:text-white border border-orange-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 transition-all duration-300 font-medium"
               value={filterPriority}
               onChange={e => setFilterPriority(e.target.value)}
             >
@@ -294,68 +333,72 @@ function Dashboard() {
               <input
                 type="text"
                 placeholder="Search by name..."
-                className="pl-8 pr-4 py-2 border rounded-md w-48"
+                className="pl-10 pr-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg w-48 bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-pink-500 dark:focus:ring-pink-400 transition-all duration-300"
               />
-              <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 absolute left-2 top-3" />
+              <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 dark:text-slate-400 absolute left-3 top-3" />
             </div>
           </div>
 
           {/* Task Cards */}
           {loadingTasks ? (
-            <div>Loading tasks...</div>
+            <div className="text-gray-600 dark:text-slate-200 font-medium">Loading tasks...</div>
           ) : (
             <div className="grid grid-cols-2 gap-4 mb-2">
               {filteredTasks.map((task) => (
-                <div key={task._id} className={`p-4 rounded-lg ${task.completed ? "bg-green-100" : "bg-orange-50"}`}>
+                <div key={task._id} className={`p-4 rounded-xl shadow-md border transition-all duration-300 ${
+                  task.completed 
+                    ? "bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 border-green-300 dark:border-green-600" 
+                    : "bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/30 dark:to-orange-800/30 border-orange-300 dark:border-orange-600"
+                }`}>
                   <div className="flex justify-between">
-                    <div>
+                    <div className="flex-1">
                       {editingTaskId === task._id ? (
                         <form onSubmit={handleEditTask}>
                           <input
-                            className="font-semibold mb-1 px-2 py-1 rounded border"
+                            className="font-semibold mb-1 px-2 py-1 rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white w-full"
                             value={editTitle}
                             onChange={e => setEditTitle(e.target.value)}
                             required
                           />
                           <input
-                            className="text-sm text-gray-600 mb-1 px-2 py-1 rounded border"
+                            className="text-sm text-gray-600 dark:text-slate-200 mb-1 px-2 py-1 rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 w-full"
                             value={editDetail}
                             onChange={e => setEditDetail(e.target.value)}
                           />
                           <div className="flex gap-2 mt-2">
-                            <button type="submit" className="text-blue-600">Save</button>
-                            <button type="button" onClick={cancelEdit} className="text-gray-500">Cancel</button>
+                            <button type="submit" className="text-blue-600 dark:text-blue-400 font-semibold hover:underline">Save</button>
+                            <button type="button" onClick={cancelEdit} className="text-gray-500 dark:text-slate-300 hover:underline">Cancel</button>
                           </div>
                         </form>
                       ) : (
                         <>
-                          <h3 className={`font-semibold ${task.completed ? "line-through text-gray-400" : ""}`}>{task.title}</h3>
-                          <p className={`text-sm ${task.completed ? "line-through text-gray-400" : "text-gray-600"}`}>{task.detail}</p>
-                          <p className="text-sm text-gray-500 mt-2">
+                          <h3 className={`font-semibold text-lg ${task.completed ? "line-through text-gray-500 dark:text-slate-400" : "text-gray-900 dark:text-white"}`}>{task.title}</h3>
+                          <p className={`text-sm mt-1 ${task.completed ? "line-through text-gray-500 dark:text-slate-400" : "text-gray-700 dark:text-slate-200"}`}>{task.detail}</p>
+                          <p className="text-xs text-gray-500 dark:text-slate-300 mt-2 font-medium">
                             Created: {new Date(task.createdAt).toLocaleDateString()}
                           </p>
-                          <div className="flex gap-2 mb-1">
-                            <span className={`px-2 py-1 rounded text-xs font-semibold
-                              ${task.priority === 'High' ? 'bg-red-200 text-red-800' :
-                                task.priority === 'Medium' ? 'bg-yellow-200 text-yellow-800' :
-                                'bg-green-200 text-green-800'}`}>
+                          <div className="flex gap-2 mt-3">
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm
+                              ${task.priority === 'High' ? 'bg-red-200 dark:bg-red-800/50 text-red-800 dark:text-red-100 ring-1 ring-red-400 dark:ring-red-600' :
+                                task.priority === 'Medium' ? 'bg-yellow-200 dark:bg-yellow-800/50 text-yellow-800 dark:text-yellow-100 ring-1 ring-yellow-400 dark:ring-yellow-600' :
+                                'bg-green-200 dark:bg-green-800/50 text-green-800 dark:text-green-100 ring-1 ring-green-400 dark:ring-green-600'}`}>
                               {task.priority}
                             </span>
-                            <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700 font-semibold">
+                            <span className="px-3 py-1 rounded-full text-xs bg-blue-200 dark:bg-blue-800/50 text-blue-800 dark:text-blue-100 font-bold shadow-sm ring-1 ring-blue-400 dark:ring-blue-600">
                               {task.category}
                             </span>
                           </div>
                         </>
                       )}
                     </div>
-                    <div className="flex gap-2">
-                      <button className="p-1 hover:text-green-600" onClick={() => handleCompleteTask(task)}>
+                    <div className="flex gap-2 ml-2">
+                      <button className="p-1.5 hover:text-green-600 dark:hover:text-green-400 text-gray-600 dark:text-slate-300 hover:bg-green-100 dark:hover:bg-green-900/40 rounded-lg transition-all" onClick={() => handleCompleteTask(task)}>
                         <CheckCircleIcon className="w-5 h-5" />
                       </button>
-                      <button className="p-1 hover:text-blue-600" onClick={() => startEditTask(task)}>
+                      <button className="p-1.5 hover:text-blue-600 dark:hover:text-blue-400 text-gray-600 dark:text-slate-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg transition-all" onClick={() => startEditTask(task)}>
                         <PencilIcon className="w-5 h-5" />
                       </button>
-                      <button className="p-1 hover:text-red-600" onClick={() => handleDeleteTask(task._id)}>
+                      <button className="p-1.5 hover:text-red-600 dark:hover:text-red-400 text-gray-600 dark:text-slate-300 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg transition-all" onClick={() => handleDeleteTask(task._id)}>
                         <TrashIcon className="w-5 h-5" />
                       </button>
                     </div>
@@ -365,36 +408,36 @@ function Dashboard() {
             </div>
           )}
 
-          <button className="w-full text-center text-blue-600 hover:underline py-1 mb-4">
+          <button className="w-full text-center text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline py-2 mb-4 font-semibold transition-colors">
             Load more
           </button>
         </div>
       </div>
 
       {/* Stats Section - Updated spacing */}
-      <div className="mt-4 grid grid-cols-3 gap-6 bg-white p-3 rounded-lg shadow-sm">
-        <div className="bg-orange-50 p-4 rounded-lg flex flex-col items-center justify-center">
-          <h3 className="text-gray-600 text-sm font-medium mb-1">COMPLETED TASKS</h3>
-          <p className="text-4xl font-bold">04</p>
+      <div className="mt-4 grid grid-cols-3 gap-6 bg-white dark:bg-slate-800 p-3 rounded-xl shadow-lg dark:shadow-2xl border border-gray-200 dark:border-slate-600 transition-all duration-300">
+        <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/30 dark:to-orange-800/30 p-4 rounded-lg flex flex-col items-center justify-center border border-orange-200 dark:border-orange-600">
+          <h3 className="text-gray-600 dark:text-slate-200 text-sm font-bold mb-1 tracking-wide">COMPLETED TASKS</h3>
+          <p className="text-4xl font-bold text-orange-600 dark:text-orange-400">04</p>
         </div>
         
-        <div className="bg-pink-50 p-4 rounded-lg flex flex-col items-center justify-center">
-          <h3 className="text-gray-600 text-sm font-medium mb-1">PENDING TASKS</h3>
-          <p className="text-4xl font-bold">15</p>
+        <div className="bg-gradient-to-br from-pink-50 to-pink-100 dark:from-pink-900/30 dark:to-pink-800/30 p-4 rounded-lg flex flex-col items-center justify-center border border-pink-200 dark:border-pink-600">
+          <h3 className="text-gray-600 dark:text-slate-200 text-sm font-bold mb-1 tracking-wide">PENDING TASKS</h3>
+          <p className="text-4xl font-bold text-pink-600 dark:text-pink-400">15</p>
         </div>
 
-        <div className="bg-white border rounded-lg p-3 flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg p-3 flex items-center justify-between">
           <div>
-            <h3 className="text-blue-600 text-sm font-medium mb-1">Tasks created</h3>
-            <p className="text-4xl font-bold">1,500</p>
+            <h3 className="text-blue-600 dark:text-blue-400 text-sm font-bold mb-1">Tasks created</h3>
+            <p className="text-4xl font-bold text-gray-900 dark:text-white">1,500</p>
           </div>
           <div className="flex flex-col items-end">
-            <span className="text-blue-600 text-sm mb-2">25k+ Active Users</span>
+            <span className="text-blue-600 dark:text-blue-400 text-sm mb-2 font-semibold">25k+ Active Users</span>
             <div className="flex -space-x-2">
               {[1, 2, 3, 4].map((_, i) => (
                 <div
                   key={i}
-                  className="w-8 h-8 rounded-full border-2 border-white overflow-hidden"
+                  className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-600 overflow-hidden ring-2 ring-gray-200 dark:ring-slate-500"
                 >
                   <img
                     src={`https://i.pravatar.cc/32?img=${i}`}

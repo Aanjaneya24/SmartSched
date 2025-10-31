@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import { authService } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -16,12 +16,12 @@ export const AuthProvider = ({ children }) => {
     const token = localStorage.getItem('token');
     if (token) {
       try {
-        const response = await axios.get('http://localhost:8000/auth/verify', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setUser(response.data.user);
+        const { data } = await authService.verify();
+        setUser(data.user);
       } catch (error) {
+        console.error('Token verification failed:', error);
         localStorage.removeItem('token');
+        setUser(null);
       }
     }
     setLoading(false);
@@ -29,32 +29,32 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await axios.post('http://localhost:8000/auth/login', {
-        email,
-        password
-      });
-      const { token, user } = response.data;
-      localStorage.setItem('token', token);
-      setUser(user);
+      console.log('AuthContext login called with:', { email, password: '***' });
+      const response = await authService.login({ email, password });
+      console.log('AuthService response:', response);
+      localStorage.setItem('token', response.token);
+      setUser(response.user);
       setError(null);
-      return true;
+      return { success: true };
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
-      throw err;
+      console.error('Login error in AuthContext:', err);
+      const errorMessage = err.response?.data?.message || err.message || 'Login failed';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
     }
   };
 
   const signup = async (userData) => {
     try {
-      const response = await axios.post('http://localhost:8000/auth/signup', userData);
-      const { token, user } = response.data;
-      localStorage.setItem('token', token);
-      setUser(user);
+      const response = await authService.signup(userData);
+      localStorage.setItem('token', response.token);
+      setUser(response.user);
       setError(null);
-      return true;
+      return { success: true };
     } catch (err) {
-      setError(err.response?.data?.message || 'Signup failed');
-      throw err;
+      const errorMessage = err.response?.data?.message || 'Signup failed';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
     }
   };
 
@@ -71,9 +71,10 @@ export const AuthProvider = ({ children }) => {
       error,
       login,
       signup,
-      logout
+      logout,
+      isAuthenticated: !!user
     }}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };
